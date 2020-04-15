@@ -12,16 +12,16 @@ import {Schema} from './types';
 import {emptyDir, indent, writeFile} from './utils';
 
 export interface Definition {
-  properties: {
-    [key: string]: Schema;
-  };
-  required?: string[];
-  description?: string;
+    properties: {
+        [key: string]: Schema;
+    };
+    required?: string[];
+    description?: string;
 }
 
 export interface ProcessedDefinition {
-  name: string;
-  def: Definition;
+    name: string;
+    def: Definition;
 }
 
 /**
@@ -29,36 +29,38 @@ export interface ProcessedDefinition {
  * to individual files
  * @param defs definitions from the schema
  * @param config global configuration
+ * @param version swagger version 2.0 or 3.0.1
  */
-export function processDefinitions(defs: {[key: string]: Definition}, config: Config): ProcessedDefinition[] {
-  emptyDir(path.join(config.dest, conf.defsDir));
+export function processDefinitions(defs: { [key: string]: Definition },
+                                   config: Config,
+                                   version = '2.0'): ProcessedDefinition[] {
+    emptyDir(path.join(config.dest, conf.defsDir));
 
-  const definitions: ProcessedDefinition[] = [];
-  const files: {[key: string]: string[]} = {};
+    const definitions: ProcessedDefinition[] = [];
+    const files: { [key: string]: string[] } = {};
 
-  _.forOwn(defs, (v, source) => {
-    const file = processDefinition(v, source, config);
-    if (file && file.name) {
-      const previous = files[file.name];
-      if (previous === undefined) files[file.name] = [source];
-      else previous.push(source);
-      definitions.push(file);
-    }
-  });
+    _.forOwn(defs, (v, source) => {
+        const file = processDefinition(v, source, config, version);
+        if (file && file.name) {
+            const previous = files[file.name];
+            if (previous === undefined) files[file.name] = [source];
+            else previous.push(source);
+            definitions.push(file);
+        }
+    });
 
-  let allExports = '';
-  _.forOwn(files, (sources, def) => {
-    allExports += createExport(def) + createExportComments(def, sources) + '\n';
-  });
+    let allExports = '';
+    _.forOwn(files, (sources, def) => {
+        allExports += createExport(def) + createExportComments(def, sources) + '\n';
+    });
+    writeToBaseModelFile(config, allExports);
 
-  writeToBaseModelFile(config, allExports);
-
-  return definitions;
+    return definitions;
 }
 
 export function writeToBaseModelFile(config: Config, allExports: string) {
-  const filename = path.join(config.dest, `${conf.modelFile}.ts`);
-  writeFile(filename, allExports, config.header);
+    const filename = path.join(config.dest, `${conf.modelFile}.ts`);
+    writeFile(filename, allExports, config.header);
 }
 
 /**
@@ -66,32 +68,37 @@ export function writeToBaseModelFile(config: Config, allExports: string) {
  * @param def type definition
  * @param name name of the type definition and after normalization of the resulting interface + file
  * @param config
+ * @param version
  */
-export function processDefinition(def: Definition, name: string, config: Config): ProcessedDefinition {
-  if (!isWritable(name)) return;
+export function processDefinition(def: Definition,
+                                  name: string,
+                                  config: Config,
+                                  version = '2.0'): ProcessedDefinition {
+    if (!isWritable(name)) return;
 
-  name = normalizeDef(name);
-  const nameModel = name;
-  let output = '';
-  const properties = _.map(def.properties, (v, k) => processProperty(v, k, name, def.required, true, nameModel));
-  // conditional import of global types
-  if (properties.some(p => !p.native)) {
-    output += `import * as __${conf.modelFile} from \'../${conf.modelFile}\';\n\n`;
-  }
-  if (def.description) output += `/** ${def.description} */\n`;
+    name = normalizeDef(name);
+    const nameModel = name;
+    let output = '';
+    const properties = _.map(def.properties, (v, k) => processProperty(v, k, name, def.required, true,
+        nameModel, version));
+    // conditional import of global types
+    if (properties.some(p => !p.native)) {
+        output += `import * as __${conf.modelFile} from \'../${conf.modelFile}\';\n\n`;
+    }
+    if (def.description) output += `/** ${def.description} */\n`;
 
-  output += `export interface ${name} {\n`;
-  output += indent(_.map(properties, 'property').join('\n'));
-  output += `\n}\n`;
+    output += `export interface ${name} {\n`;
+    output += indent(_.map(properties, 'property').join('\n'));
+    output += `\n}\n`;
 
-  // concat non-empty enum lines
-  const enumLines = _.map(properties, 'enumDeclaration').filter(Boolean).join('\n\n');
-  if (enumLines) output += `\n${enumLines}\n`;
+    // concat non-empty enum lines
+    const enumLines = _.map(properties, 'enumDeclaration').filter(Boolean).join('\n\n');
+    if (enumLines) output += `\n${enumLines}\n`;
 
-  const filename = path.join(config.dest, conf.defsDir, `${name}.ts`);
-  writeFile(filename, output, config.header);
+    const filename = path.join(config.dest, conf.defsDir, `${name}.ts`);
+    writeFile(filename, output, config.header);
 
-  return {name, def};
+    return {name, def};
 }
 
 /**
@@ -99,7 +106,7 @@ export function processDefinition(def: Definition, name: string, config: Config)
  * @param def name of the definition file w/o extension
  */
 export function createExport(def: string): string {
-  return `export * from './${conf.defsDir}/${def}';`;
+    return `export * from './${conf.defsDir}/${def}';`;
 }
 
 /**
@@ -108,11 +115,11 @@ export function createExport(def: string): string {
  * @param sources list of sources for the file
  */
 function createExportComments(file: string, sources: string[]): string {
-  if (sources.length > 1 || !sources.includes(file)) {
-    return ' // sources: ' + sources.join(', ');
-  }
+    if (sources.length > 1 || !sources.includes(file)) {
+        return ' // sources: ' + sources.join(', ');
+    }
 
-  return '';
+    return '';
 }
 
 /**
@@ -120,9 +127,9 @@ function createExportComments(file: string, sources: string[]): string {
  * @param type name
  */
 function isWritable(type: string) {
-  if ((type.startsWith('Collection«')) || (type.startsWith('Map«'))) {
-    return false;
-  }
+    if ((type.startsWith('Collection«')) || (type.startsWith('Map«'))) {
+        return false;
+    }
 
-  return true;
+    return true;
 }

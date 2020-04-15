@@ -37,13 +37,18 @@ export function generate(
   omitBasepath = false,
   environmentAPI: string = conf.environmentAPI,
   omitHeader = false,
-  readOnly= '',
+  readOnly = '',
   environmentCache = conf.environmentCache) {
   let schema: any;
+  let version = '2.0';
 
   try {
     const content = fs.readFileSync(src);
     schema = JSON.parse(content.toString());
+    // Version verification, the default version is 2.0
+    if (schema.openapi && schema.openapi === '3.0.1') {
+      version = schema.openapi;
+    }
   } catch (e) {
     if (e instanceof SyntaxError) {
       out(`${src} is either not a valid JSON scheme or contains non-printable characters`, TermColors.red);
@@ -69,9 +74,11 @@ export function generate(
   const config: Config = {header, dest, generateStore, unwrapSingleParamMethods};
 
   if (!fs.existsSync(dest)) fs.mkdirSync(dest);
-  const definitions = processDefinitions(schema.definitions, config);
+  const definitions = version === '2.0'
+    ? processDefinitions(schema.definitions, config)
+    : processDefinitions(schema.components.schemas, config, version);
   processPaths(schema.paths, `http://${schema.host}${swaggerUrlPath}${conf.swaggerFile}`,
-               config, definitions, schema.basePath, environmentAPI, readOnly, environmentCache);
+    config, definitions, schema.basePath, environmentAPI, readOnly, environmentCache);
 }
 
 function recreateDirectories(dest: string, generateStore: boolean) {
